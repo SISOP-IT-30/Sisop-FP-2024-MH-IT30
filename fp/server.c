@@ -1,4 +1,3 @@
-// server.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,24 +71,20 @@ int main() {
     struct sockaddr_in server_addr, client_addr;
     pthread_t tid;
 
-    // Create socket
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
 
-    // Initialize server address struct
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(PORT);
 
-    // Bind socket to address
     if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         perror("Bind failed");
         exit(EXIT_FAILURE);
     }
 
-    // Start listening
     if (listen(server_fd, MAX_CLIENTS) < 0) {
         perror("Listen failed");
         exit(EXIT_FAILURE);
@@ -97,7 +92,6 @@ int main() {
 
     printf("Server listening on port %d...\n", PORT);
 
-    // Accept incoming connections and handle them
     while (1) {
         
         user_count = 0;
@@ -110,7 +104,6 @@ int main() {
             continue;
         }
 
-        // Create client info struct
         client_info *new_client = (client_info *)malloc(sizeof(client_info));
         new_client->socket = client_socket;
         new_client->address = client_addr;
@@ -119,25 +112,23 @@ int main() {
         strcpy(new_client->logged_in_channel, "");
         strcpy(new_client->logged_in_room, "");
 
-        // Add client to array (protected by mutex)
         pthread_mutex_lock(&clients_mutex);
         clients[client_count++] = new_client;
         pthread_mutex_unlock(&clients_mutex);
 
-        // Create thread to handle client
         if (pthread_create(&tid, NULL, handle_client, (void *)new_client) != 0) {
             perror("Thread creation failed");
             continue;
         }
 
-        // Limit number of clients
+        
         if (client_count >= MAX_CLIENTS) {
             printf("Maximum clients reached. No longer accepting connections.\n");
             break;
         }
     }
 
-    // Close server socket
+    
     close(server_fd);
 
     return 0;
@@ -209,7 +200,7 @@ void *handle_client(void *arg) {
         perror("Receive failed");
     }
 
-    // Remove client from array (protected by mutex)
+    
     pthread_mutex_lock(&clients_mutex);
     for (int i = 0; i < MAX_CLIENTS; ++i) {
         if (clients[i] == client) {
@@ -220,12 +211,12 @@ void *handle_client(void *arg) {
     }
     pthread_mutex_unlock(&clients_mutex);
 
-    // Close socket and free thread
+    
     close(client_socket);
     pthread_exit(NULL);
 }
 
-// Function to register a new user
+
 void register_user(int client_fd, char *username, char *password) {
     FILE *file = fopen(USERS_FILE, "a+");
     if (!file) {
@@ -234,7 +225,7 @@ void register_user(int client_fd, char *username, char *password) {
         return;
     }
 
-    // Check if username already exists
+    
     char line[256];
     bool username_exists = false;
     while (fgets(line, sizeof(line), file)) {
@@ -254,11 +245,11 @@ void register_user(int client_fd, char *username, char *password) {
     if (username_exists) {
         send(client_fd, "username sudah terdaftar\n", strlen("username sudah terdaftar\n"), 0);
     } else {
-        // Generate salt and hash the password
+        
         char hashed_password[128];
         strcpy(hashed_password, crypt(password, SALT));
 
-        // Write username, hashed_password, and salt to USERS_FILE
+        
         if(user_count == 0){
             fprintf(file, "%d,%s,%s,%s\n", user_count+1, username, hashed_password, "root");
         } else {
@@ -268,10 +259,10 @@ void register_user(int client_fd, char *username, char *password) {
 
         send(client_fd, "username berhasil register\n", strlen("username berhasil register\n"), 0);
 
-        // Log registration in users.log
+        
         log_activity(username, "REGISTER", "User registered");
 
-        // Create entry in auth.csv for the new user with role "user"
+        
         FILE *auth_file = fopen(AUTH_FILE, "a+");
         if (!auth_file) {
             perror("Failed to open AUTH_FILE");
@@ -291,7 +282,6 @@ void login(int client_fd, char *username, char *password) {
         return;
     }
 
-    // Check if username and password match
     char line[256];
     bool user_found = false;
     char stored_password[128];
@@ -301,12 +291,10 @@ void login(int client_fd, char *username, char *password) {
         char *stored_hashed_password = strtok(NULL, ",");
         char *stored_role = strtok(NULL, ",");
 
-        // Trim newline character from the stored hashed password
         if (stored_hashed_password) {
             stored_hashed_password[strcspn(stored_hashed_password, "\n")] = '\0';
         }
 
-        // Check if the username matches
         if (stored_username && strcmp(stored_username, username) == 0) {
             user_found = true;
             strcpy(stored_password, stored_hashed_password);
@@ -319,20 +307,16 @@ void login(int client_fd, char *username, char *password) {
     if (!user_found) {
         send(client_fd, "Username tidak terdaftar\n", strlen("Username tidak terdaftar\n"), 0);
     } else {
-        // Validate password
         char input_hashed_password[128];
         strcpy(input_hashed_password, crypt(password, stored_password));
 
         if (strcmp(stored_password, input_hashed_password) != 0) {
             send(client_fd, "Password salah\n", strlen("Password salah\n"), 0);
         } else {
-            // Successful login
             send(client_fd, "username berhasil login\n", strlen("username berhasil login\n"), 0);
 
-            // Log login in users.log
             log_activity(username, "LOGIN", "User logged in");
 
-            // Update client info
             pthread_mutex_lock(&clients_mutex);
             for (int i = 0; i < MAX_CLIENTS; ++i) {
                 if (clients[i] != NULL && clients[i]->socket == client_fd) {
@@ -347,7 +331,6 @@ void login(int client_fd, char *username, char *password) {
 }
 
 
-// Function to log activity in users.log
 void log_activity(char *username, char *action, char *description) {
     FILE *log_file = fopen(USERS_LOG_FILE, "a");
     if (!log_file) {
@@ -415,7 +398,6 @@ void join_channel(int client_fd, char *username, char *channel_name, char *key) 
         return;
     }
 
-    // Now, check if the user is already in the channel
     bool user_already_in_channel = false;
     pthread_mutex_lock(&clients_mutex);
     for (int i = 0; i < MAX_CLIENTS; ++i) {
@@ -433,14 +415,9 @@ void join_channel(int client_fd, char *username, char *channel_name, char *key) 
         return;
     }
 
-    // If a key is required, check if the provided key matches
     if (key != NULL) {
-        // Implement your logic to check if the key matches
-        // For now, assume it's correct if key is provided
-        // Replace with actual logic to check against stored channel keys
     }
 
-    // Update the client's logged_in_channel
     pthread_mutex_lock(&clients_mutex);
     for (int i = 0; i < MAX_CLIENTS; ++i) {
         if (clients[i] != NULL && clients[i]->socket == client_fd) {
@@ -450,17 +427,14 @@ void join_channel(int client_fd, char *username, char *channel_name, char *key) 
     }
     pthread_mutex_unlock(&clients_mutex);
 
-    // Send success message to client
     char message[BUFFER_SIZE];
     sprintf(message, "Berhasil masuk ke channel %s\n", channel_name);
     send(client_fd, message, strlen(message), 0);
 
-    // Log activity in users.log
     log_activity(username, "JOIN CHANNEL", channel_name);
 }
 
 void list_rooms(int client_fd, char *username, char *channel_name) {
-    // Open channels.csv to check if the channel exists
     FILE *file = fopen(CHANNELS_FILE, "r");
     if (!file) {
         perror("Failed to open CHANNELS_FILE");
@@ -468,7 +442,6 @@ void list_rooms(int client_fd, char *username, char *channel_name) {
         return;
     }
 
-    // Check if the channel exists
     char line[256];
     bool channel_found = false;
     while (fgets(line, sizeof(line), file)) {
@@ -486,8 +459,6 @@ void list_rooms(int client_fd, char *username, char *channel_name) {
         return;
     }
 
-    // Assuming rooms are stored in a file named with the channel name
-    // e.g., care_rooms.csv for channel "care"
     char rooms_file[256];
     sprintf(rooms_file, "%s_rooms.csv", channel_name);
 
@@ -513,7 +484,6 @@ void list_rooms(int client_fd, char *username, char *channel_name) {
 }
 
 void list_users(int client_fd, char *username, char *channel_name) {
-    // Open auth.csv to check if the user is an admin of the channel
     FILE *file = fopen(AUTH_FILE, "r");
     if (!file) {
         perror("Failed to open AUTH_FILE");
@@ -521,7 +491,6 @@ void list_users(int client_fd, char *username, char *channel_name) {
         return;
     }
 
-    // Check if the user is an admin of the channel
     char line[256];
     bool is_admin = false;
     while (fgets(line, sizeof(line), file)) {
@@ -539,8 +508,6 @@ void list_users(int client_fd, char *username, char *channel_name) {
         return;
     }
 
-    // Assuming users in the channel are stored in a file named with the channel name
-    // e.g., care_users.csv for channel "care"
     char users_file[256];
     sprintf(users_file, "%s_users.csv", channel_name);
 
@@ -566,7 +533,6 @@ void list_users(int client_fd, char *username, char *channel_name) {
 }
 
 void chat(int client_fd, char *username, char *channel_name, char *room_name, char *message) {
-    // Validate if the user is logged into the specified channel and room
     pthread_mutex_lock(&clients_mutex);
     bool user_found = false;
     for (int i = 0; i < MAX_CLIENTS; ++i) {
@@ -601,22 +567,17 @@ void chat(int client_fd, char *username, char *channel_name, char *room_name, ch
     info = localtime(&rawtime);
     strftime(timestamp, sizeof(timestamp), "%d/%m/%Y %H:%M:%S", info);
 
-    // Generate a unique ID for the message
     int message_id;
-    // Logic to generate message_id goes here
 
-    // Write to chat.csv
     fprintf(file, "[%s][%d][%s] \"%s\"\n", timestamp, message_id, username, message);
     fclose(file);
 
-    // Send confirmation message to client
     char response[BUFFER_SIZE];
     sprintf(response, "[%s] \"%s\" berhasil dikirim\n", timestamp, message);
     send(client_fd, response, strlen(response), 0);
 }
 
 void see_chat(int client_fd, char *username, char *channel_name, char *room_name) {
-    // Validate if the user is logged into the specified channel and room
     pthread_mutex_lock(&clients_mutex);
     bool user_found = false;
     for (int i = 0; i < MAX_CLIENTS; ++i) {
@@ -635,8 +596,6 @@ void see_chat(int client_fd, char *username, char *channel_name, char *room_name
         return;
     }
 
-    // Assuming chat history is stored in a file named with the room name
-    // e.g., care_room1_chat.csv for room "room1" in channel "care"
     char chat_file[256];
     sprintf(chat_file, "%s_%s_chat.csv", channel_name, room_name);
 
@@ -657,7 +616,6 @@ void see_chat(int client_fd, char *username, char *channel_name, char *room_name
 }
 
 void edit_chat(int client_fd, char *username, char *channel_name, char *room_name, int message_id, char *new_message) {
-    // Validate if the user is logged into the specified channel and room
     pthread_mutex_lock(&clients_mutex);
     bool user_found = false;
     for (int i = 0; i < MAX_CLIENTS; ++i) {
@@ -676,19 +634,15 @@ void edit_chat(int client_fd, char *username, char *channel_name, char *room_nam
         return;
     }
 
-    // Assuming chat messages are stored in a file named with the room name
-    // e.g., care_room1_chat.csv for room "room1" in channel "care"
     char chat_file[256];
     sprintf(chat_file, "%s_%s_chat.csv", channel_name, room_name);
 
-    // Open the chat file for reading and writing
     FILE *file = fopen(chat_file, "r+");
     if (!file) {
         send(client_fd, "Gagal membuka chat untuk diedit\n", strlen("Gagal membuka chat untuk diedit\n"), 0);
         return;
     }
 
-    // Find and edit the specified message_id
     char line[256];
     char edited_message[256];
     bool message_found = false;
@@ -696,12 +650,10 @@ void edit_chat(int client_fd, char *username, char *channel_name, char *room_nam
         int id;
         sscanf(line, "[%*[^]]][%d]", &id);
         if (id == message_id) {
-            // Construct the edited message
             char timestamp[80];
             sscanf(line, "[%[^]]][%*d]", timestamp);
             sprintf(edited_message, "[%s][%d][%s] \"%s\"\n", timestamp, message_id, username, new_message);
 
-            // Move the file pointer back to overwrite the line
             fseek(file, -strlen(line), SEEK_CUR);
             fprintf(file, "%s", edited_message);
             message_found = true;
@@ -720,7 +672,6 @@ void edit_chat(int client_fd, char *username, char *channel_name, char *room_nam
 }
 
 void del_chat(int client_fd, char *username, char *channel_name, char *room_name, int message_id) {
-    // Validate if the user is logged into the specified channel and room
     pthread_mutex_lock(&clients_mutex);
     bool user_found = false;
     for (int i = 0; i < MAX_CLIENTS; ++i) {
@@ -739,8 +690,6 @@ void del_chat(int client_fd, char *username, char *channel_name, char *room_name
         return;
     }
 
-    // Assuming chat messages are stored in a file named with the room name
-    // e.g., care_room1_chat.csv for room "room1" in channel "care"
     char chat_file[256];
     sprintf(chat_file, "%s_%s_chat.csv", channel_name, room_name);
 
@@ -883,7 +832,7 @@ void create_channel(int client_fd, char *username, char *channel_name, char *key
         send(client_fd, "Gagal membuka file auth\n", strlen("Gagal membuka file auth\n"), 0);
         return;
     }
-    fprintf(file, "%d,%s,admin\n", user_info->socket, username);  // Assuming socket is used as id_user
+    fprintf(file, "%d,%s,admin\n", user_info->socket, username);  
     fclose(file);
 
     char user_log_file[256];
@@ -962,7 +911,6 @@ void edit_channel(int client_fd, char *username, char *old_channel_name, char *n
         return;
     }
 
-    // Assuming channels are stored in channels.csv
     char channels_file[256] = CHANNELS_FILE;
     create_directory("DiscorIT");
     FILE *file = fopen(channels_file, "r+");
@@ -971,7 +919,6 @@ void edit_channel(int client_fd, char *username, char *old_channel_name, char *n
         return;
     }
 
-    // Check if the old channel name exists and find its position in the file
     char line[256];
     bool channel_found = false;
     long int pos = -1;
@@ -1059,7 +1006,6 @@ void del_channel(int client_fd, char *username, char *channel_name) {
 
     if (current_client != NULL) {
         if (strcmp(current_client->logged_in_channel, channel_name) == 0) {
-            // Implement logic to delete the channel
             printf("Channel %s deleted\n", channel_name);
         } else {
             printf("You are not authorized to delete this channel\n");
@@ -1179,7 +1125,6 @@ void del_room(int client_fd, char *username, char *channel_name, char *room_name
 
     if (current_client != NULL) {
         if (strcmp(current_client->logged_in_channel, channel_name) == 0 && strcmp(current_client->logged_in_room, room_name) == 0) {
-            // Implement logic to delete the room
             printf("Room %s deleted from %s channel\n", room_name, channel_name);
         } else {
             printf("You are not authorized to delete this room in this channel\n");
@@ -1204,7 +1149,6 @@ void del_all_rooms(int client_fd, char *username, char *channel_name) {
 
     if (current_client != NULL) {
         if (strcmp(current_client->logged_in_channel, channel_name) == 0) {
-            // Implement logic to delete all rooms
             printf("All rooms deleted from %s channel\n", channel_name);
         } else {
             printf("You are not authorized to delete all rooms in this channel\n");
@@ -1229,7 +1173,6 @@ void ban_user(int client_fd, char *username, char *channel_name, char *user_to_b
 
     if (current_client != NULL) {
         if (strcmp(current_client->logged_in_channel, channel_name) == 0) {
-            // Implement logic to ban the user
             printf("%s banned from %s channel\n", user_to_ban, channel_name);
         } else {
             printf("You are not authorized to ban users from this channel\n");
@@ -1254,7 +1197,6 @@ void unban_user(int client_fd, char *username, char *channel_name, char *user_to
 
     if (current_client != NULL) {
         if (strcmp(current_client->logged_in_channel, channel_name) == 0) {
-            // Implement logic to unban the user
             printf("%s unbanned from %s channel\n", user_to_unban, channel_name);
         } else {
             printf("You are not authorized to unban users from this channel\n");
@@ -1279,7 +1221,6 @@ void remove_user(int client_fd, char *username, char *channel_name, char *user_t
 
     if (current_client != NULL) {
         if (strcmp(current_client->logged_in_channel, channel_name) == 0) {
-            // Implement logic to remove the user
             printf("%s removed from %s channel\n", user_to_remove, channel_name);
         } else {
             printf("You are not authorized to remove users from this channel\n");
@@ -1305,7 +1246,6 @@ void edit_profile(int client_fd, char *username, char *new_username, char *new_p
     if (current_client != NULL) {
         // Update username and/or password
         strncpy(current_client->logged_in_user, new_username, sizeof(current_client->logged_in_user) - 1);
-        // Assuming password is stored somewhere else, update it similarly
 
         printf("Profile edited successfully\n");
     } else {
@@ -1328,7 +1268,6 @@ void exit_discorit(int client_fd, char *username, char *channel_name, char *room
 
     if (current_client != NULL) {
         if (strcmp(current_client->logged_in_channel, channel_name) == 0 && strcmp(current_client->logged_in_room, room_name) == 0) {
-            // Implement logic to handle user exit from channel and room
             printf("User %s exited from channel %s and room %s\n", username, channel_name, room_name);
         } else {
             printf("You are not in the specified channel and room\n");
