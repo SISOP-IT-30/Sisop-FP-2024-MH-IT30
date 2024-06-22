@@ -1,81 +1,194 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
+#include <unistd.h>
+#include <crypt.h>
+#include <stdbool.h>
 #include <arpa/inet.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <errno.h>
-#include <syslog.h>
-#include <sys/time.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
 
-#define PORT 9999
+#define PORT 9000
+#define BUFFER_SIZE 1024
 
-void registered(char *name, int nSocket){
+int server_fd;
 
-    char sBuff[1024] = { 0 };
-    while(1){
-        bzero(sBuff, 1024);
-        printf("[%s] ", name);
-        fgets(sBuff, 1023, stdin);
-        sBuff[strcspn(sBuff, "\n")] = 0;
-        send(nSocket, sBuff, strlen(sBuff), 0);
-        bzero(sBuff, 1024);
-        
+void connect_to_server() {
+    struct sockaddr_in serv_addr;
 
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Socket creation error");
+        exit(EXIT_FAILURE);
     }
 
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+        perror("Invalid address/ Address not supported");
+        exit(EXIT_FAILURE);
+    }
+
+    if (connect(server_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        perror("Connection Failed");
+        exit(EXIT_FAILURE);
+    }
 }
 
-int main() {
-    int nRet;
-    struct sockaddr_in srv;
-
-    // Open a socket - listener
-    int nSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (nSocket < 0) {
-        perror("Cannot Initialize listener socket");
-        return -1;
+void handle_command(const char *command, char *username, char *channel, char *room) {
+    if (command == NULL) {
+        printf("Perintah tidak boleh kosong\n");
+        return;
     }
 
-    srv.sin_family = AF_INET;
-    srv.sin_addr.s_addr = inet_addr("127.0.0.1");
-    srv.sin_port = htons(PORT);
-    memset(&(srv.sin_zero), 0, 8);
-
-    nRet = connect(nSocket, (struct sockaddr*)&srv, sizeof(srv));
-    if (nRet < 0) {
-        perror("Cannot connect to server");
-        close(nSocket);
-        return -1;
+    if (send(server_fd, command, strlen(command), 0) < 0) {
+        perror("Gagal mengirim perintah ke server");
     }
 
-    // Keep sending the messages
-    char sBuff[1024] = { 0 };
-    while (1) {
-        sleep(2);
-        char name[255], action[255], temp[255];
-        printf("What message you want to send?\n");
-        fgets(sBuff, 1023, stdin);
-        sBuff[strcspn(sBuff, "\n")] = 0;
-        send(nSocket, sBuff, strlen(sBuff), 0);
-        bzero(sBuff, 1024);
-        read(nSocket, sBuff, 1023);
-        sscanf(sBuff, "%s %s %s", name, temp, action);
-        if(strcmp(action, "logged") == 0){
-            printf("%s\n", sBuff);
-            registered(name, nSocket);
-            
-        } else
-            printf("%s\n", sBuff);
+    char response[BUFFER_SIZE];
+    memset(response, 0, sizeof(response));
+    int n = 0;
+    if (recv(server_fd, response, BUFFER_SIZE - 1, 0) < 0) {
+        perror("Gagal menerima respons dari server");
+    } else {
+        if (strstr(response, "Key:") != NULL) {
+            char key[50];
+            printf("Key: ");
+            fgets(key, sizeof(key), stdin);
+            key[strcspn(key, "\n")] = '\0'; 
 
-        
+            if (send(server_fd, key, strlen(key), 0) < 0) {
+                perror("Gagal mengirim key ke server");
+            }
+
+            // Receive the response after sending the key
+            memset(response, 0, sizeof(response));
+            if (recv(server_fd, response, BUFFER_SIZE - 1, 0) < 0) {
+                perror("Gagal menerima respons dari server");
+            } else {
+                if (strstr(response, "Key salah") != NULL) {
+                    // Reset state if key is invalid
+                    if (strlen(room) > 0) {
+                        room[0] = '\0';
+                    } else if (strlen(channel) > 0) {
+                        channel[0] = '\0';
+                    }
+                }
+            }
+        } else if (strstr(response, "tidak ada") != NULL || strstr(response, "Key salah") != NULL || strstr(response, "Anda telah diban") != NULL) {
+            if (strlen(room) > 0) {
+                room[0] = '\0';
+            } else if (strlen(channel) > 0) {
+                channel[0] = '\0';
+            }
+            printf("%s\n", response);
+        } else if (strstr(response, "Anda telah keluar dari aplikasi") != NULL) {
+            close(server_fd);
+            exit(0);  // Exit client program after receiving exit confirmation
+        } else if(strncmp(command, "JOIN ", 5) == 0 || strcmp(command, "EXIT") == 0 || strncmp(command, "CHAT ", 5) == 0
+                    || strstr(response, "diedit") != NULL || strstr(response, "selamanya") != NULL){
+            n++;
+        } else {
+            printf("%s\n", response);
+        }
+    }
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 3) {
+        printf("Penggunaan: %s REGISTER/LOGIN username -p password\n", argv[0]);
+        return 1;
     }
 
-    close(nSocket);
+    connect_to_server();
+
+    char command[BUFFER_SIZE];
+    memset(command, 0, sizeof(command));
+
+    char username[50];
+    char channel[50] = "";
+    char room[50] = "";
+
+    if (strcmp(argv[1], "REGISTER") == 0) {
+        if (argc < 5 || strcmp(argv[3], "-p") != 0) {
+            printf("Penggunaan: %s REGISTER username -p password\n", argv[0]);
+            return 1;
+        }
+
+        snprintf(username, sizeof(username), "%s", argv[2]);
+        char *password = argv[4];
+
+        snprintf(command, sizeof(command), "REGISTER %s -p %s", username, password);
+    } else if (strcmp(argv[1], "LOGIN") == 0) {
+        if (argc < 5 || strcmp(argv[3], "-p") != 0) {
+            printf("Penggunaan: %s LOGIN username -p password\n", argv[0]);
+            return 1;
+        }
+
+        snprintf(username, sizeof(username), "%s", argv[2]);
+        char *password = argv[4];
+
+        snprintf(command, sizeof(command), "LOGIN %s -p %s", username, password);
+
+        if (send(server_fd, command, strlen(command), 0) < 0) {
+            perror("Gagal mengirim perintah ke server");
+        }
+
+        char response[BUFFER_SIZE];
+        memset(response, 0, sizeof(response));
+
+        if (recv(server_fd, response, BUFFER_SIZE - 1, 0) < 0) {
+            perror("Gagal menerima respons dari server");
+        } else {
+            printf("%s\n", response);
+
+            if (strstr(response, "berhasil login") != NULL) {
+                while (1) {
+                    if (strlen(room) > 0) {
+                        printf("[%s/%s/%s] ", username, channel, room);
+                    } else if (strlen(channel) > 0) {
+                        printf("[%s/%s] ", username, channel);
+                    } else {
+                        printf("[%s] ", username);
+                    }
+
+                    if (fgets(command, BUFFER_SIZE, stdin) == NULL) {
+                        printf("Gagal membaca perintah\n");
+                        continue;
+                    }
+                    command[strcspn(command, "\n")] = '\0';
+
+                    if (strncmp(command, "JOIN ", 5) == 0) {
+                        if (strlen(channel) == 0) {
+                            snprintf(channel, sizeof(channel), "%s", command + 5);
+                        } else {
+                            snprintf(room, sizeof(room), "%s", command + 5);
+                        }
+                    } else if (strcmp(command, "EXIT") == 0) {
+                        if (strlen(room) > 0) {
+                            room[0] = '\0';
+                        } else if (strlen(channel) > 0) {
+                            channel[0] = '\0';
+                        }
+                    } else if(strncmp(command, "EDIT PROFILE SELF -u ", 21) == 0){
+                        snprintf(username, sizeof(username), "%s", command + 21);
+                    }
+
+                    handle_command(command, username, channel, room);
+                }
+            }
+        }
+
+        close(server_fd);
+        return 0;
+    } else {
+        printf("Perintah tidak valid\n");
+        return 1;
+    }
+
+    handle_command(command, username, channel, room);
+
+    close(server_fd);
     return 0;
 }
