@@ -12,8 +12,10 @@
 #include <errno.h>
 #include <time.h>
 #include <crypt.h>
+#include <dirent.h>
+#include <sys/wait.h>
 
-#define PORT 9000
+#define PORT 9001
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 1024
 #define SALT "duwae621h283"
@@ -24,6 +26,7 @@
 #define USERS_LOG_FILE "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/users.log"
 
 int user_count = 0;
+int is_in_channel = 0;
 
 typedef struct {
     int socket;
@@ -56,6 +59,7 @@ void create_channel(int client_fd, char *username, char *channel_name, char *key
 void edit_channel(int client_fd, char *username, char *old_channel_name, char *new_channel_name);
 void del_channel(int client_fd, char *username, char *channel_name);
 void create_room(int client_fd, char *username, char *channel_name, char *room_name);
+void join_room(int client_fd, char *username, char *room_name);
 void edit_room(int client_fd, char *username, char *channel_name, char *old_room_name, char *new_room_name);
 void del_room(int client_fd, char *username, char *channel_name, char *room_name);
 void del_all_rooms(int client_fd, char *username, char *channel_name);
@@ -207,16 +211,31 @@ void *handle_client(void *arg) {
             } else {
                 send(client_socket, "Invalid command format. Usage: CREATE CHANNEL channel -k key\n", strlen("Invalid command format. Usage: CREATE CHANNEL channel -k key\n"), 0);
             }
+        } else if (strcmp(commands[0], "CREATE") == 0 && strcmp(commands[1], "ROOM") == 0) {
+            if (commands[2] != NULL && commands[3] != NULL) {
+                create_room(client_socket, client->logged_in_user, client->logged_in_channel, commands[2]);
+            } else {
+                send(client_socket, "Invalid command format. Usage: CREATE ROOM channel_name room_name\n", strlen("Invalid command format. Usage: CREATE ROOM channel_name room_name\n"), 0);
+            }
+        } else if (strcmp(commands[0], "EDIT") == 0 && strcmp(commands[1], "ROOM") == 0) {
+            if (commands[2] != NULL && commands[3] != NULL && commands[4] != NULL) {
+                edit_room(client_socket, client->logged_in_user, client->logged_in_channel, commands[2], commands[4]);
+            } else {
+                send(client_socket, "Invalid command format. Usage: EDIT ROOM old_room_name TO new_room_name\n", strlen("Invalid command format. Usage: EDIT ROOM old_room_name TO new_room_name\n"), 0);
+            }
+        } else if (strcmp(commands[0], "DELETE") == 0 && strcmp(commands[1], "ROOM") == 0) {
+            if (commands[2] != NULL) {
+                del_room(client_socket, client->logged_in_user, client->logged_in_channel, commands[2]);
+            } else {
+                send(client_socket, "Invalid command format. Usage: DELETE ROOM room_name\n", strlen("Invalid command format. Usage: DELETE ROOM room_name\n"), 0);
+            }
         } else if (strcmp(commands[0], "LIST") == 0 && strcmp(commands[1], "CHANNEL") == 0) {
             list_channels(client_socket, client->logged_in_user);
-
-        } else if (strcmp(commands[0], "JOIN") == 0) {
-
-            if (commands[1] != NULL && channel_exists(commands[1])){
+        } else if (strcmp(commands[0], "JOIN") == 0 && is_in_channel == 0) {
+            if (commands[1] != NULL && channel_exists(commands[1])) {
                 char key[50];
                 send(client_socket, "Key: ", strlen("Key: "), 0);
                 int key_size = recv(client_socket, key, sizeof(key), 0);
-                
                 //check if the key is correct
                 if (check_channel_key(commands[1], key)) {
                     join_channel(client_socket, client->logged_in_user, commands[1], key);
@@ -226,8 +245,8 @@ void *handle_client(void *arg) {
             } else {
                 send(client_socket, "Channel tidak ada \n", strlen("Channel tidak ada\n"), 0);
             }
-
-            
+        } else if (strcmp(commands[0], "JOIN") == 0 && client->logged_in_channel != NULL) {
+            join_room(client_socket, client->logged_in_user, commands[1]);
         } else if (strcmp(commands[0], "LIST") == 0 && strcmp(commands[1], "USERS") == 0) {
             if (commands[2] == NULL) {
                 list_users(client_socket, client->logged_in_user);
@@ -498,6 +517,7 @@ void join_channel(int client_fd, char *username, char *channel_name, char *key) 
     // Send confirmation message to client
     char message[BUFFER_SIZE];
     sprintf(message, "Channel %s berhasil dimasuki\n", channel_name);
+    is_in_channel = 1;
     send(client_fd, message, strlen(message), 0);
 }
 
@@ -587,6 +607,49 @@ void list_rooms(int client_fd, char *username, char *channel_name) {
     strcat(response, "]\n");
 
     send(client_fd, response, strlen(response), 0);
+}
+
+void join_room(int client_fd, char *username, char *room_name) {
+
+    pthread_mutex_lock(&clients_mutex);
+    pthread_mutex_unlock(&clients_mutex);
+
+    // Add user to the channel
+    pthread_mutex_lock(&clients_mutex);
+    for (int i = 0; i < MAX_CLIENTS; ++i) {
+        if (clients[i] != NULL && clients[i]->socket == client_fd) {
+            log_activity(username, "JOIN ROOM", room_name);
+            break;
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
+
+    // Append user to auth.csv
+    int room_exists = 0;
+    char path[256];
+    sprintf(path, "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/%s/", clients[client_id(client_fd, username)]->logged_in_channel);
+    DIR *d;
+    struct dirent *dir;
+    d = opendir(path);
+    if (d) {
+        while ((dir = readdir(d)) != NULL) {
+            if(strcmp(dir->d_name, room_name) == 0) {
+                room_exists = 1;
+                break;
+            }
+        }
+        closedir(d);
+    }
+    // Send confirmation message to client
+    if(room_exists == 0) {
+        send(client_fd, "Room tidak ada\n", strlen("Room tidak ada\n"), 0);
+        return;
+    }
+    else{
+        char message[BUFFER_SIZE];
+        sprintf(message, "Room %s berhasil dimasuki\n", room_name);
+        send(client_fd, message, strlen(message), 0);
+    }
 }
 
 
@@ -862,19 +925,8 @@ void create_channel(int client_fd, char *username, char *channel_name, char *key
         send(client_fd, "Anda tidak terdaftar atau sudah logout\n", strlen("Anda tidak terdaftar atau sudah logout\n"), 0);
         return;
     }
-
-    // Check if the user has admin or root role in any channel
-    bool is_admin_or_root = false;
-    for (int i = 0; i < MAX_CLIENTS; ++i) {
-        if (clients[i] != NULL && (strcmp(clients[i]->logged_in_role, "admin") == 0 || strcmp(clients[i]->logged_in_role, "root") == 0)) {
-            is_admin_or_root = true;
-            break;
-        }
-    }
-
     pthread_mutex_unlock(&clients_mutex);
 
-    
     FILE *file = fopen(CHANNELS_FILE, "a+");
     if (!file) {
         send(client_fd, "Gagal membuka file channels\n", strlen("Gagal membuka file channels\n"), 0);
@@ -1147,17 +1199,12 @@ void create_room(int client_fd, char *username, char *channel_name, char *room_n
     while (fgets(line, sizeof(line), file)) {
         char stored_username[50];
         sscanf(line, "%*d,%49[^,],", stored_username);
-        if (strcmp(stored_username, username) == 0) {
+        if (strstr(stored_username, username) != 0) {
             is_authorized = true;
             break;
         }
     }
     fclose(file);
-
-    if (!is_authorized) {
-        send(client_fd, "Anda tidak diizinkan untuk membuat room di channel ini\n", strlen("Anda tidak diizinkan untuk membuat room di channel ini\n"), 0);
-        return;
-    }
 
     // Create room directory and chat.csv file
     char room_path[256];
@@ -1168,20 +1215,7 @@ void create_room(int client_fd, char *username, char *channel_name, char *room_n
     sprintf(chat_file, "DiscorIT/%s/%s/chat.csv", channel_name, room_name);
     create_file(chat_file);
 
-    // Log the creation in users.log
-    char log_file[256] = USERS_LOG_FILE;
-    FILE *log = fopen(log_file, "a");
-    if (!log) {
-        send(client_fd, "Gagal membuka file log\n", strlen("Gagal membuka file log\n"), 0);
-        return;
-    }
-
-    time_t now = time(NULL);
-    char *time_str = asctime(localtime(&now));
-    time_str[strlen(time_str) - 1] = '\0'; // Remove newline character
-
-    fprintf(log, "[%s] Room %s di channel %s dibuat oleh %s\n", time_str, room_name, channel_name, username);
-    fclose(log);
+    log_activity(username, "CREATE ROOM", room_name);
 
     send(client_fd, "Room berhasil dibuat\n", strlen("Room berhasil dibuat\n"), 0);
 }
@@ -1197,16 +1231,44 @@ void edit_room(int client_fd, char *username, char *channel_name, char *old_room
         }
     }
 
-    if (current_client != NULL) {
-        if (strcmp(current_client->logged_in_channel, channel_name) == 0 && strcmp(current_client->logged_in_room, old_room_name) == 0) {
-            printf("Room %s edited to %s in %s channel\n", old_room_name, new_room_name, channel_name);
-        } else {
-            printf("You are not authorized to edit this room in this channel\n");
-        }
-    } else {
-        printf("User not found\n");
-    }
+    DIR *d;
+    struct dirent *dir;
+    char path[256];
+    int found = 0;
+    snprintf(path, sizeof(path), "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/%s/", channel_name);
+    d = opendir(path);
+    if (d) {
+        while ((dir = readdir(d)) != NULL) {
+            if(strcmp(dir->d_name, old_room_name) == 0) {
+                char new_room_path[256];
+                char old_room_path[256];
 
+                snprintf(new_room_path, sizeof(new_room_path), "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/%s/%s", channel_name, new_room_name);
+                snprintf(old_room_path, sizeof(old_room_path), "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/%s/%s", channel_name, old_room_name);
+                pid_t child_id;
+                int status;
+                child_id = fork();
+                if (child_id == 0) {
+                    char *argv[] = {"mv", old_room_path, new_room_path, NULL};
+                    execv("/bin/mv", argv);
+                }
+                else {
+                    while ((wait(&status)) > 0);
+                }
+                found = 1;
+                break;
+            }
+        }
+        closedir(d);
+    }
+    if(found == 0) {
+        send(client_fd, "Room tidak ditemukan\n", strlen("Room tidak ditemukan\n"), 0);
+        return;
+    }
+    else{
+        send(client_fd, "Room berhasil diubah\n", strlen("Room berhasil diubah\n"), 0);
+    }
+    log_activity(username, "EDIT ROOM", new_room_name);
     pthread_mutex_unlock(&clients_mutex);
 }
 

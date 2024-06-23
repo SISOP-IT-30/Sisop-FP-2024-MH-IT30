@@ -9,7 +9,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 
-#define PORT 9000
+#define PORT 9001
 #define BUFFER_SIZE 1024
 
 int server_fd;
