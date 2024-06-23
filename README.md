@@ -2,7 +2,7 @@
 
 Sistem Operasi Sederhana DiscorIT
 
-## [FUN PROJECT] (https://its.id/m/SisopFunProject)
+## [FUN PROJECT](https://its.id/m/SisopFunProject)
 
 Mata Kuliah Sistem Operasi
 
