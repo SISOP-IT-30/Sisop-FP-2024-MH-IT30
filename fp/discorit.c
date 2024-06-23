@@ -9,7 +9,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 
-#define PORT 9001
+#define PORT 9000
 #define BUFFER_SIZE 1024
 
 int server_fd;
@@ -50,7 +50,7 @@ void handle_command(const char *command, char *username, char *channel, char *ro
     memset(response, 0, sizeof(response));
     int n = 0;
     if (recv(server_fd, response, BUFFER_SIZE - 1, 0) < 0) {
-        perror("Gagal menerima respons dari server");
+        perror("Cannot Receive");
     } else {
         if (strstr(response, "Key:") != NULL) {
             char key[50];
@@ -65,7 +65,7 @@ void handle_command(const char *command, char *username, char *channel, char *ro
             // Receive the response after sending the key
             memset(response, 0, sizeof(response));
             if (recv(server_fd, response, BUFFER_SIZE - 1, 0) < 0) {
-                perror("Gagal menerima respons dari server");
+                perror("Cannot Receive");
             } else {
                 if (strstr(response, "Key salah") != NULL) {
                     // Reset state if key is invalid
@@ -86,8 +86,7 @@ void handle_command(const char *command, char *username, char *channel, char *ro
         } else if (strstr(response, "Anda telah keluar dari aplikasi") != NULL) {
             close(server_fd);
             exit(0);  // Exit client program after receiving exit confirmation
-        } else if(strncmp(command, "JOIN ", 5) == 0 || strcmp(command, "EXIT") == 0 || strstr(response, "berhasil dikirim") != NULL
-                    || strstr(response, "diedit") != NULL || strstr(response, "selamanya") != NULL){
+        } else if(strncmp(command, "JOIN ", 5) == 0){
             n++;
         } else {
             printf("%s\n", response);
@@ -139,7 +138,7 @@ int main(int argc, char *argv[]) {
         memset(response, 0, sizeof(response));
 
         if (recv(server_fd, response, BUFFER_SIZE - 1, 0) < 0) {
-            perror("Gagal menerima respons dari server");
+            perror("Cannot Receive");
         } else {
             printf("%s\n", response);
 
@@ -171,8 +170,6 @@ int main(int argc, char *argv[]) {
                         } else if (strlen(channel) > 0) {
                             channel[0] = '\0';
                         }
-                    } else if(strncmp(command, "EDIT PROFILE SELF -u ", 21) == 0){
-                        snprintf(username, sizeof(username), "%s", command + 21);
                     }
 
                     handle_command(command, username, channel, room);
