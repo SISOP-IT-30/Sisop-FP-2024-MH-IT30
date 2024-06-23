@@ -42,10 +42,12 @@ void load_users();
 void *handle_client(void *arg);
 void register_user(int client_fd, char *username, char *password);
 void login(int client_fd, char *username, char *password);
+bool channel_exists(const char *channel_name);
 void list_channels(int client_fd, char *username);
 void join_channel(int client_fd, char *username, char *channel_name, char *key);
+bool check_channel_key(const char *channel_name, const char *key);
 void list_rooms(int client_fd, char *username, char *channel_name);
-void list_users(int client_fd, char *username, char *channel_name);
+void list_users(int client_fd, char *username);
 void chat(int client_fd, char *username, char *channel_name, char *room_name, char *message);
 void see_chat(int client_fd, char *username, char *channel_name, char *room_name);
 void edit_chat(int client_fd, char *username, char *channel_name, char *room_name, int message_id, char *new_message);
@@ -65,6 +67,7 @@ void exit_discorit(int client_fd, char *username, char *channel_name, char *room
 void log_activity(char *username, char *action, char *description);
 void create_directory(const char *path);
 void create_file(const char *path);
+int client_id(int client_fd, char *username);
 
 int main() {
     int server_fd, client_socket, client_count = 0;
@@ -134,8 +137,39 @@ int main() {
     return 0;
 }
 
+char* get_user_role(const char *username) {
+    static char role[10];
+    FILE *file = fopen(USERS_FILE, "r");
+    if (!file) {
+        perror("Failed to open USERS_FILE");
+        return NULL;
+    }
+
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        char *stored_id = strtok(line, ",");
+        char *stored_username = strtok(NULL, ",");
+        char *stored_hashed_password = strtok(NULL, ",");
+        char *stored_role = strtok(NULL, ",");
+
+        if (stored_role) {
+            stored_role[strcspn(stored_role, "\n")] = '\0';
+        }
+
+        if (stored_username && strcmp(stored_username, username) == 0) {
+            strcpy(role, stored_role);
+            fclose(file);
+            return role;
+        }
+    }
+
+    fclose(file);
+    return NULL;
+}
+
 // Function to handle each client connection
 void *handle_client(void *arg) {
+    
     client_info *client = (client_info *)arg;
     int client_socket = client->socket;
     char buffer[BUFFER_SIZE] = {0};
@@ -154,7 +188,6 @@ void *handle_client(void *arg) {
             token = strtok(NULL, " ");
         }
         commands[i] = NULL;
-
         // Process command based on the first token
         if (strcmp(commands[0], "REGISTER") == 0) {
             if (commands[1] != NULL && strcmp(commands[2], "-p") == 0 && commands[3] != NULL) {
@@ -176,15 +209,30 @@ void *handle_client(void *arg) {
             }
         } else if (strcmp(commands[0], "LIST") == 0 && strcmp(commands[1], "CHANNEL") == 0) {
             list_channels(client_socket, client->logged_in_user);
+
         } else if (strcmp(commands[0], "JOIN") == 0) {
-            if (commands[1] != NULL) {
+
+            if (commands[1] != NULL && channel_exists(commands[1])){
                 char key[50];
                 send(client_socket, "Key: ", strlen("Key: "), 0);
                 int key_size = recv(client_socket, key, sizeof(key), 0);
-                key[key_size - 1] = '\0'; // Remove newline character
-                join_channel(client_socket, client->logged_in_user, commands[1], key);
+                
+                //check if the key is correct
+                if (check_channel_key(commands[1], key)) {
+                    join_channel(client_socket, client->logged_in_user, commands[1], key);
+                } else {
+                    send(client_socket, "Key salah tod\n", strlen("Key salah tod\n"), 0);
+                }
             } else {
-                send(client_socket, "Invalid command format. Usage: JOIN channel\n", strlen("Invalid command format. Usage: JOIN channel\n"), 0);
+                send(client_socket, "Channel tidak ada \n", strlen("Channel tidak ada\n"), 0);
+            }
+
+            
+        } else if (strcmp(commands[0], "LIST") == 0 && strcmp(commands[1], "USERS") == 0) {
+            if (commands[2] == NULL) {
+                list_users(client_socket, client->logged_in_user);
+            } else {
+                send(client_socket, "Invalid command format. Usage: LIST USERS\n", strlen("Invalid command format. Usage: LIST USERS\n"), 0);
             }
         } else {
             send(client_socket, "Unknown command\n", strlen("Unknown command\n"), 0);
@@ -195,12 +243,11 @@ void *handle_client(void *arg) {
 
     // Client disconnected
     if (read_size == 0) {
-
+        // Client disconnected
     } else if (read_size == -1) {
         perror("Receive failed");
     }
 
-    
     pthread_mutex_lock(&clients_mutex);
     for (int i = 0; i < MAX_CLIENTS; ++i) {
         if (clients[i] == client) {
@@ -211,11 +258,18 @@ void *handle_client(void *arg) {
     }
     pthread_mutex_unlock(&clients_mutex);
 
-    
     close(client_socket);
     pthread_exit(NULL);
 }
 
+int client_id(int client_fd, char *username){
+    for (int i = 0; i < MAX_CLIENTS; ++i) {
+        if (clients[i] != NULL &&
+            strstr(clients[i]->logged_in_user, username) != NULL){
+            return i;
+        }
+    }
+}
 
 void register_user(int client_fd, char *username, char *password) {
     FILE *file = fopen(USERS_FILE, "a+");
@@ -347,6 +401,28 @@ void log_activity(char *username, char *action, char *description) {
     fclose(log_file);
 }
 
+bool channel_exists(const char *channel_name) {
+    FILE *file = fopen(CHANNELS_FILE, "r");
+    if (!file) {
+        perror("Failed to open CHANNELS_FILE");
+        return false;
+    }
+
+    char line[256];
+    bool found = false;
+    while (fgets(line, sizeof(line), file)) {
+        char *token = strtok(line, ",");
+        token = strtok(NULL, ","); // Get the channel name
+        if (token != NULL && strstr(token, channel_name) != NULL) {
+            
+            found = true;
+            break;
+        }
+    }
+
+    fclose(file);
+    return found;
+}
 
 void list_channels(int client_fd, char *username) {
     FILE *file = fopen(CHANNELS_FILE, "r");
@@ -359,45 +435,26 @@ void list_channels(int client_fd, char *username) {
     char response[BUFFER_SIZE] = "[";
     char line[256];
     while (fgets(line, sizeof(line), file)) {
-        char *channel_name = strtok(line, ",");
-        if (channel_name != NULL) {
-            strcat(response, channel_name);
+        char *token = strtok(line, ",");  // Skip the first token (channel ID)
+        token = strtok(NULL, ",");  // Get the second token (channel name)
+        if (token != NULL) {
+            strcat(response, token);
             strcat(response, " ");
         }
     }
     fclose(file);
 
+    // Remove the trailing space if any
+    if (response[strlen(response) - 1] == ' ') {
+        response[strlen(response) - 1] = '\0';
+    }
     strcat(response, "]\n");
 
     send(client_fd, response, strlen(response), 0);
 }
 
 void join_channel(int client_fd, char *username, char *channel_name, char *key) {
-    // Open channels.csv to check if the channel exists
-    FILE *file = fopen(CHANNELS_FILE, "r+");
-    if (!file) {
-        perror("Failed to open CHANNELS_FILE");
-        send(client_fd, "Server error. Please try again later.\n", strlen("Server error. Please try again later.\n"), 0);
-        return;
-    }
-
-    char line[256];
-    bool channel_found = false;
-    while (fgets(line, sizeof(line), file)) {
-        char *token = strtok(line, ",");
-        if (token != NULL && strcmp(token, channel_name) == 0) {
-            channel_found = true;
-            break;
-        }
-    }
-
-    fclose(file);
-
-    if (!channel_found) {
-        send(client_fd, "Channel tidak ditemukan\n", strlen("Channel tidak ditemukan\n"), 0);
-        return;
-    }
-
+    // Check if the user is already in the channel
     bool user_already_in_channel = false;
     pthread_mutex_lock(&clients_mutex);
     for (int i = 0; i < MAX_CLIENTS; ++i) {
@@ -405,33 +462,82 @@ void join_channel(int client_fd, char *username, char *channel_name, char *key) 
             strcmp(clients[i]->logged_in_user, username) == 0 &&
             strcmp(clients[i]->logged_in_channel, channel_name) == 0) {
             user_already_in_channel = true;
+            send(client_fd, "Anda sudah bergabung di channel ini\n", strlen("Anda sudah bergabung di channel ini\n"), 0);
             break;
         }
     }
     pthread_mutex_unlock(&clients_mutex);
 
     if (user_already_in_channel) {
-        send(client_fd, "Anda sudah bergabung di channel ini\n", strlen("Anda sudah bergabung di channel ini\n"), 0);
-        return;
+        return; // Exit function if user is already in the channel
     }
 
-    if (key != NULL) {
-    }
-
+    // Add user to the channel
     pthread_mutex_lock(&clients_mutex);
     for (int i = 0; i < MAX_CLIENTS; ++i) {
         if (clients[i] != NULL && clients[i]->socket == client_fd) {
             strcpy(clients[i]->logged_in_channel, channel_name);
+            log_activity(username, "JOIN CHANNEL", channel_name);
             break;
         }
     }
     pthread_mutex_unlock(&clients_mutex);
 
-    char message[BUFFER_SIZE];
-    sprintf(message, "Berhasil masuk ke channel %s\n", channel_name);
-    send(client_fd, message, strlen(message), 0);
+    // Append user to auth.csv
+    char path[256];
+    sprintf(path, "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/%s/admin/auth.csv", clients[client_id(client_fd, username)]->logged_in_channel);
+    FILE *auth_file = fopen(path, "a");
+    if (!auth_file) {
+        perror("Failed to open AUTH_FILE");
+        return;
+    }
+    
+    fprintf(auth_file, "%d,%s,user\n", client_id(client_fd, username), username);
+    fclose(auth_file);
 
-    log_activity(username, "JOIN CHANNEL", channel_name);
+    // Send confirmation message to client
+    char message[BUFFER_SIZE];
+    sprintf(message, "Channel %s berhasil dimasuki\n", channel_name);
+    send(client_fd, message, strlen(message), 0);
+}
+
+bool check_channel_key(const char *channel_name, const char *key) {
+    FILE *file = fopen(CHANNELS_FILE, "r");
+    if (!file) {
+        perror("Failed to open CHANNELS_FILE");
+        return false;
+    }
+
+    char line[256];
+    char channel_key[50];
+    bool channel_found = false;
+    bool key_matched = true;
+
+    while (fgets(line, sizeof(line), file)) {
+        char *token = strtok(line, ",");
+        if (token != NULL) {
+            token = strtok(NULL, ",");
+            if (token != NULL && strstr(token, channel_name) == 0) {
+                token = strtok(NULL, ",");
+                if (token != NULL) {
+                    strcpy(channel_key, token);
+                    channel_key[strcspn(channel_key, "\n")] = '\0';  // Remove newline character
+                    channel_found = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    fclose(file);
+
+    if (channel_found) {
+        if (strstr(key, channel_key) == 0) {
+            key_matched = false;
+        }
+    }
+
+    return key_matched;
 }
 
 void list_rooms(int client_fd, char *username, char *channel_name) {
@@ -483,52 +589,43 @@ void list_rooms(int client_fd, char *username, char *channel_name) {
     send(client_fd, response, strlen(response), 0);
 }
 
-void list_users(int client_fd, char *username, char *channel_name) {
-    FILE *file = fopen(AUTH_FILE, "r");
-    if (!file) {
-        perror("Failed to open AUTH_FILE");
-        send(client_fd, "Server error. Please try again later.\n", strlen("Server error. Please try again later.\n"), 0);
-        return;
-    }
 
-    char line[256];
-    bool is_admin = false;
-    while (fgets(line, sizeof(line), file)) {
-        char *token = strtok(line, ",");
-        char *role = strtok(NULL, ",");
-        if (token != NULL && role != NULL && strcmp(token, username) == 0 && strcmp(role, "admin") == 0) {
-            is_admin = true;
-            break;
-        }
-    }
-    fclose(file);
-
-    if (!is_admin) {
-        send(client_fd, "Anda tidak memiliki akses untuk melihat user di channel ini\n", strlen("Anda tidak memiliki akses untuk melihat user di channel ini\n"), 0);
-        return;
-    }
-
+void list_users(int client_fd, char *username) {
+    // Construct the path to auth.csv based on the client's logged-in channel
     char users_file[256];
-    sprintf(users_file, "%s_users.csv", channel_name);
+    sprintf(users_file, "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/%s/admin/auth.csv", clients[client_id(client_fd, username)]->logged_in_channel);
 
-    file = fopen(users_file, "r");
+    // Open the auth.csv file
+    FILE *file = fopen(users_file, "r");
     if (!file) {
+        // If file opening fails, send an error message to the client
         send(client_fd, "Belum ada user di channel ini\n", strlen("Belum ada user di channel ini\n"), 0);
         return;
     }
 
-    char response[BUFFER_SIZE] = "[";
+    char response[BUFFER_SIZE] = "["; // Start the response string with '['
+    char line[256];
+
+    // Read each line from the file
     while (fgets(line, sizeof(line), file)) {
-        char *user_name = strtok(line, ",");
-        if (user_name != NULL) {
-            strcat(response, user_name);
+        // Use strtok to tokenize the line based on ','
+        char *token = strtok(line, ",");
+        
+        // The second token (index 1) is the username, assuming auth.csv structure is consistent
+        token = strtok(NULL, ","); // Move to the next token (username)
+
+        if (token != NULL) {
+            // Append the username to the response string
+            strcat(response, token);
             strcat(response, " ");
         }
     }
     fclose(file);
 
+    // Append closing bracket and newline to the response
     strcat(response, "]\n");
 
+    // Send the response to the client
     send(client_fd, response, strlen(response), 0);
 }
 
@@ -847,11 +944,12 @@ void create_channel(int client_fd, char *username, char *channel_name, char *key
         return;
     }
 
-    time_t now = time(NULL);
-    char *time_str = asctime(localtime(&now));
-    time_str[strlen(time_str) - 1] = '\0'; // Remove newline character
+    time_t now;
+    time(&now);
+    char timestamp[20];
+    strftime(timestamp, sizeof(timestamp), "%d/%m/%Y %H:%M:%S", localtime(&now));
 
-    fprintf(log, "[%s] Channel %s dibuat oleh %s\n", time_str, channel_name, username);
+    fprintf(log, "[%s] Channel %s dibuat oleh %s\n", timestamp, channel_name, username);
     fclose(log);
 
     send(client_fd, "Channel berhasil dibuat\n", strlen("Channel berhasil dibuat\n"), 0);
