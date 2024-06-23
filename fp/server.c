@@ -19,11 +19,11 @@
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 1024
 #define SALT "duwae621h283"
-#define USERS_FILE "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/users.csv"
-#define CHANNELS_FILE "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/channels.csv"
-#define AUTH_FILE "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/auth.csv"
-#define CHAT_LOG_FILE "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/chat.csv"
-#define USERS_LOG_FILE "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/users.log"
+#define USERS_FILE "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/users.csv"
+#define CHANNELS_FILE "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/channels.csv"
+#define AUTH_FILE "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/auth.csv"
+#define CHAT_LOG_FILE "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/chat.csv"
+#define USERS_LOG_FILE "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/users.log"
 
 int user_count = 0;
 int is_in_channel = 0;
@@ -212,26 +212,28 @@ void *handle_client(void *arg) {
                 send(client_socket, "Invalid command format. Usage: CREATE CHANNEL channel -k key\n", strlen("Invalid command format. Usage: CREATE CHANNEL channel -k key\n"), 0);
             }
         } else if (strcmp(commands[0], "CREATE") == 0 && strcmp(commands[1], "ROOM") == 0) {
-            if (commands[2] != NULL && commands[3] != NULL) {
-                create_room(client_socket, client->logged_in_user, client->logged_in_channel, commands[2]);
+            if (commands[3] != NULL && commands[3] != NULL) {
+                create_room(client_socket, client->logged_in_user, client->logged_in_channel, commands[3]);
             } else {
                 send(client_socket, "Invalid command format. Usage: CREATE ROOM channel_name room_name\n", strlen("Invalid command format. Usage: CREATE ROOM channel_name room_name\n"), 0);
             }
         } else if (strcmp(commands[0], "EDIT") == 0 && strcmp(commands[1], "ROOM") == 0) {
-            if (commands[2] != NULL && commands[3] != NULL && commands[4] != NULL) {
+            if (commands[3] != NULL && commands[3] != NULL && commands[4] != NULL) {
                 edit_room(client_socket, client->logged_in_user, client->logged_in_channel, commands[2], commands[4]);
             } else {
                 send(client_socket, "Invalid command format. Usage: EDIT ROOM old_room_name TO new_room_name\n", strlen("Invalid command format. Usage: EDIT ROOM old_room_name TO new_room_name\n"), 0);
             }
         } else if (strcmp(commands[0], "DELETE") == 0 && strcmp(commands[1], "ROOM") == 0) {
-            if (commands[2] != NULL) {
-                del_room(client_socket, client->logged_in_user, client->logged_in_channel, commands[2]);
+            if (commands[3] != NULL) {
+                del_room(client_socket, client->logged_in_user, client->logged_in_channel, commands[3]);
             } else {
                 send(client_socket, "Invalid command format. Usage: DELETE ROOM room_name\n", strlen("Invalid command format. Usage: DELETE ROOM room_name\n"), 0);
             }
-        } else if (strcmp(commands[0], "LIST") == 0 && strcmp(commands[1], "CHANNEL") == 0) {
+        } 
+        else if (strcmp(commands[0], "LIST") == 0 && strcmp(commands[1], "CHANNEL") == 0) {
             list_channels(client_socket, client->logged_in_user);
-        } else if (strcmp(commands[0], "JOIN") == 0 && is_in_channel == 0) {
+        } 
+        else if (strcmp(commands[0], "JOIN") == 0 && is_in_channel == 0) {
             if (commands[1] != NULL && channel_exists(commands[1])) {
                 char key[50];
                 send(client_socket, "Key: ", strlen("Key: "), 0);
@@ -245,15 +247,43 @@ void *handle_client(void *arg) {
             } else {
                 send(client_socket, "Channel tidak ada \n", strlen("Channel tidak ada\n"), 0);
             }
-        } else if (strcmp(commands[0], "JOIN") == 0 && client->logged_in_channel != NULL) {
+        } 
+        else if (strcmp(commands[0], "JOIN") == 0 && client->logged_in_channel != NULL) {
             join_room(client_socket, client->logged_in_user, commands[1]);
-        } else if (strcmp(commands[0], "LIST") == 0 && strcmp(commands[1], "USERS") == 0) {
+        } 
+        else if (strcmp(commands[0], "LIST") == 0 && strcmp(commands[1], "USERS") == 0) {
             if (commands[2] == NULL) {
                 list_users(client_socket, client->logged_in_user);
             } else {
                 send(client_socket, "Invalid command format. Usage: LIST USERS\n", strlen("Invalid command format. Usage: LIST USERS\n"), 0);
             }
-        } else {
+        } 
+        else if (strcmp(commands[0], "CHAT") == 0) {
+            if (client->logged_in_channel != NULL && client->logged_in_room != NULL && commands[1] != NULL) {
+                chat(client_socket, client->logged_in_user, client->logged_in_channel, client->logged_in_room, commands[1]);
+            } else {
+                send(client_socket, "Invalid command format. Usage: CHAT \"text\"\n", strlen("Invalid command format. Usage: CHAT \"text\"\n"), 0);
+            }
+        } else if (strcmp(commands[0], "SEE") == 0 && strcmp(commands[1], "CHAT") == 0) {
+            if (client->logged_in_channel != NULL && client->logged_in_room != NULL) {
+                see_chat(client_socket, client->logged_in_user, client->logged_in_channel, client->logged_in_room);
+            } else {
+                send(client_socket, "Invalid command format. Usage: SEE CHAT\n", strlen("Invalid command format. Usage: SEE CHAT\n"), 0);
+            }
+        } else if (strcmp(commands[0], "EDIT") == 0 && strcmp(commands[1], "CHAT") == 0) {
+            if (client->logged_in_channel != NULL && client->logged_in_room != NULL && commands[2] != NULL && commands[3] != NULL) {
+                edit_chat(client_socket, client->logged_in_user, client->logged_in_channel, client->logged_in_room, atoi(commands[2]), commands[3]);
+            } else {
+                send(client_socket, "Invalid command format. Usage: EDIT CHAT id \"text\"\n", strlen("Invalid command format. Usage: EDIT CHAT id \"text\"\n"), 0);
+            }
+        } else if (strcmp(commands[0], "DEL") == 0 && strcmp(commands[1], "CHAT") == 0) {
+            if (client->logged_in_channel != NULL && client->logged_in_room != NULL && commands[2] != NULL) {
+                del_chat(client_socket, client->logged_in_user, client->logged_in_channel, client->logged_in_room, atoi(commands[2]));
+            } else {
+                send(client_socket, "Invalid command format. Usage: DEL CHAT id\n", strlen("Invalid command format. Usage: DEL CHAT id\n"), 0);
+            }
+        }
+        else {
             send(client_socket, "Unknown command\n", strlen("Unknown command\n"), 0);
         }
 
@@ -504,7 +534,7 @@ void join_channel(int client_fd, char *username, char *channel_name, char *key) 
 
     // Append user to auth.csv
     char path[256];
-    sprintf(path, "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/%s/admin/auth.csv", clients[client_id(client_fd, username)]->logged_in_channel);
+    sprintf(path, "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/%s/admin/auth.csv", clients[client_id(client_fd, username)]->logged_in_channel);
     FILE *auth_file = fopen(path, "a");
     if (!auth_file) {
         perror("Failed to open AUTH_FILE");
@@ -627,7 +657,7 @@ void join_room(int client_fd, char *username, char *room_name) {
     // Append user to auth.csv
     int room_exists = 0;
     char path[256];
-    sprintf(path, "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/%s/", clients[client_id(client_fd, username)]->logged_in_channel);
+    sprintf(path, "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/%s/", clients[client_id(client_fd, username)]->logged_in_channel);
     DIR *d;
     struct dirent *dir;
     d = opendir(path);
@@ -656,7 +686,7 @@ void join_room(int client_fd, char *username, char *room_name) {
 void list_users(int client_fd, char *username) {
     // Construct the path to auth.csv based on the client's logged-in channel
     char users_file[256];
-    sprintf(users_file, "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/%s/admin/auth.csv", clients[client_id(client_fd, username)]->logged_in_channel);
+    sprintf(users_file, "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/%s/admin/auth.csv", clients[client_id(client_fd, username)]->logged_in_channel);
 
     // Open the auth.csv file
     FILE *file = fopen(users_file, "r");
@@ -693,26 +723,18 @@ void list_users(int client_fd, char *username) {
 }
 
 void chat(int client_fd, char *username, char *channel_name, char *room_name, char *message) {
-    pthread_mutex_lock(&clients_mutex);
-    bool user_found = false;
-    for (int i = 0; i < MAX_CLIENTS; ++i) {
-        if (clients[i] != NULL &&
-            strcmp(clients[i]->logged_in_user, username) == 0 &&
-            strcmp(clients[i]->logged_in_channel, channel_name) == 0 &&
-            strcmp(clients[i]->logged_in_room, room_name) == 0) {
-            user_found = true;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&clients_mutex);
+    // Ensure the file path includes the channel name and room name
+    char chat_file_path[256];
+    sprintf(chat_file_path, "DiscorIT/%s/%s/chat.csv", channel_name, room_name);
 
-    if (!user_found) {
-        send(client_fd, "Anda tidak memiliki akses untuk mengirim pesan di room ini\n", strlen("Anda tidak memiliki akses untuk mengirim pesan di room ini\n"), 0);
-        return;
-    }
+    // printf("Channel: %s, Room: %s\n", channel_name, room_name);
 
-    // Append the chat message to chat.csv
-    FILE *file = fopen("chat.csv", "a+");
+    // Create the directory if it does not exist
+    char dir_path[256];
+    sprintf(dir_path, "DiscorIT/%s/%s", channel_name, room_name);
+    mkdir(dir_path, 0777);
+
+    FILE *file = fopen(chat_file_path, "a+");
     if (!file) {
         perror("Failed to open chat.csv");
         send(client_fd, "Server error. Please try again later.\n", strlen("Server error. Please try again later.\n"), 0);
@@ -727,41 +749,36 @@ void chat(int client_fd, char *username, char *channel_name, char *room_name, ch
     info = localtime(&rawtime);
     strftime(timestamp, sizeof(timestamp), "%d/%m/%Y %H:%M:%S", info);
 
-    int message_id;
+    // Determine the next message ID by reading existing messages
+    int message_id = 0;
+    char last_line[256];
+    fseek(file, 0, SEEK_SET);
+    while (fgets(last_line, sizeof(last_line), file)) {
+        int current_id;
+        sscanf(last_line, "%*s\t%d\t%*s\t%*s", &current_id);
+        if (current_id > message_id) {
+            message_id = current_id;
+        }
+    }
+    message_id++;
 
-    fprintf(file, "[%s][%d][%s] \"%s\"\n", timestamp, message_id, username, message);
+    // Write to the file with the correct format
+    fprintf(file, "%s\t%d\t%s\t%s\n", timestamp, message_id, username, message);
     fclose(file);
 
+    // Send the response to the client
     char response[BUFFER_SIZE];
-    sprintf(response, "[%s] \"%s\" berhasil dikirim\n", timestamp, message);
+    sprintf(response, "[%s] \"%s\" successfully sent\n", timestamp, message);
     send(client_fd, response, strlen(response), 0);
 }
 
 void see_chat(int client_fd, char *username, char *channel_name, char *room_name) {
-    pthread_mutex_lock(&clients_mutex);
-    bool user_found = false;
-    for (int i = 0; i < MAX_CLIENTS; ++i) {
-        if (clients[i] != NULL &&
-            strcmp(clients[i]->logged_in_user, username) == 0 &&
-            strcmp(clients[i]->logged_in_channel, channel_name) == 0 &&
-            strcmp(clients[i]->logged_in_room, room_name) == 0) {
-            user_found = true;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&clients_mutex);
+    char chat_file_path[256];
+    sprintf(chat_file_path, "DiscorIT/%s/%s/chat.csv", channel_name, room_name);
 
-    if (!user_found) {
-        send(client_fd, "Anda tidak memiliki akses untuk melihat chat di room ini\n", strlen("Anda tidak memiliki akses untuk melihat chat di room ini\n"), 0);
-        return;
-    }
-
-    char chat_file[256];
-    sprintf(chat_file, "%s_%s_chat.csv", channel_name, room_name);
-
-    FILE *file = fopen(chat_file, "r");
+    FILE *file = fopen(chat_file_path, "r");
     if (!file) {
-        send(client_fd, "Belum ada chat di room ini\n", strlen("Belum ada chat di room ini\n"), 0);
+        send(client_fd, "No chat in this room yet\n", strlen("No chat in this room yet\n"), 0);
         return;
     }
 
@@ -1235,7 +1252,7 @@ void edit_room(int client_fd, char *username, char *channel_name, char *old_room
     struct dirent *dir;
     char path[256];
     int found = 0;
-    snprintf(path, sizeof(path), "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/%s/", channel_name);
+    snprintf(path, sizeof(path), "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/%s/", channel_name);
     d = opendir(path);
     if (d) {
         while ((dir = readdir(d)) != NULL) {
@@ -1243,8 +1260,8 @@ void edit_room(int client_fd, char *username, char *channel_name, char *old_room
                 char new_room_path[256];
                 char old_room_path[256];
 
-                snprintf(new_room_path, sizeof(new_room_path), "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/%s/%s", channel_name, new_room_name);
-                snprintf(old_room_path, sizeof(old_room_path), "/home/purofuro/Fico/fpsisop/gg/newone/DiscorIT/%s/%s", channel_name, old_room_name);
+                snprintf(new_room_path, sizeof(new_room_path), "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/%s/%s", channel_name, new_room_name);
+                snprintf(old_room_path, sizeof(old_room_path), "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/%s/%s", channel_name, old_room_name);
                 pid_t child_id;
                 int status;
                 child_id = fork();
