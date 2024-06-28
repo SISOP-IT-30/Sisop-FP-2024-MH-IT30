@@ -386,29 +386,42 @@ Fungsi ini membaca nama client yang berada dalam file auth.csv yang ada di chann
 
 ![github-small](https://github.com/PuroFuro/image_for_sisop/blob/main/fp/15.png)
 
-### 16. void chat(int client_fd, char *username, char *channel_name, char *room_name, char *message);
-
-Fungsi ini membaca client berada di room mana dan meng-printkan apa yang ditulis client tersebut di monitor dan juga dimasukan ke dalam chat.csv sesuai dengan masing-masing room
-
-![github-small](https://github.com/PuroFuro/image_for_sisop/blob/main/fp/16.png)
-
-### 17. void see_chat(int client_fd, char *username, char *channel_name, char *room_name);
-
-Fungsi ini membaca apa yang telah ditulis di chat.csv yang berada di room tersebut
-
-![github-small](https://github.com/PuroFuro/image_for_sisop/blob/main/fp/17.png)
-
-### 18. void exit_discorit(int client_fd, char *username, char *channel_name, char *room_name); [Bagian Revisi]
+### 16. void exit_discorit(int client_fd, char *username, char *channel_name, char *room_name); [Bagian Revisi]
 
 Fungsi ini mengeluarkan client dari room/channel atau dari server itu sendiri
 
 ![github-small](https://github.com/PuroFuro/image_for_sisop/blob/main/fp/18.png)
 
-### 19. void log_activity(char *username, char *action, char *description);
+### 17. void log_activity(char *username, char *action, char *description);
 
 Fungsi ini sebenarnya tidak perlu tapi dibuat sebagai debugging
 
 ![github-small](https://github.com/PuroFuro/image_for_sisop/blob/main/fp/19.png)
+
+### 18. void chat(int client_fd, char *username, char *channel_name, char *room_name, char *message);
+
+Fungsi ini membaca client berada di room mana dan meng-printkan apa yang ditulis client tersebut di monitor dan juga dimasukan ke dalam chat.csv sesuai dengan masing-masing room
+
+![github-small](https://github.com/bielnzar/sisop/blob/main/FP/chat.png)
+
+### 19. void see_chat(int client_fd, char *username, char *channel_name, char *room_name)
+
+Fungsi ini membaca apa yang telah ditulis di chat.csv yang berada di room tersebut, agar user bisa melihat chat yang telah dituliskan
+
+![github-small](https://github.com/bielnzar/sisop/blob/main/FP/see_chat.png)
+
+## 20. void edit_chat(int client_fd, char *username, char *channel_name, char *room_name, int message_id, char *new_message); [Bagian Revisi]
+
+Fungsi baru ini bisa untuk mengedit Chat yang sebelumnya sudah ada :
+
+![github-small](https://github.com/bielnzar/sisop/blob/main/FP/edit_chat.png)
+
+## 21. void del_chat(int client_fd, char *username, char *channel_name, char *room_name, int message_id) [Bagian Revisi]
+
+Fungsi ini berguna untuk menghapus chat yang sudah ada sebelumnya
+
+![github-small](https://github.com/bielnzar/sisop/blob/main/FP/del-chat.png)
+
 
 ## Monitor.c
 
