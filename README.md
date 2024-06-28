@@ -422,10 +422,6 @@ Fungsi ini berguna untuk menghapus chat yang sudah ada sebelumnya
 
 ![github-small](https://github.com/bielnzar/sisop/blob/main/FP/del-chat.png)
 
-### Pada Bagian yang diberi keterangan [Bagian Revisi] merupakan fungsi yang perlu revisi setelah demo dengan asisten
-
-~ Sekian Laporan Resmi dari kami kelompok IT30, Semoga nilai Akumulasi praktikum kami maksimal, terimakasih kami haturkan kepada seluruh Asisten yang telah membersamai kami dalam mempelajari mata kuliah Sistem Operasi ini, Kami juga memohonkan maaf apabila banyak terdapat kesalahan dan kekurangan, sekian dari kami IT30, TERIMAKASIH :>
-
 ## Monitor.c
 
 Untuk bagian monitor.c yang ia lakukan adalah membaca file .csv secara terus menerus sehingga bisa dibilang ia membacanya secara real time
@@ -579,5 +575,10 @@ int main(int argc, char *argv[]) {
 ```
 
 **Gambar Monitor dijalankan**
+
+
+## Pada Bagian yang diberi keterangan [Bagian Revisi] merupakan fungsi yang perlu revisi setelah demo dengan asisten
+
+### ~ Sekian Laporan Resmi dari kami kelompok IT30, Semoga nilai Akumulasi praktikum kami maksimal, terimakasih kami haturkan kepada seluruh Asisten yang telah membersamai kami dalam mempelajari mata kuliah Sistem Operasi ini, Kami juga memohonkan maaf apabila banyak terdapat kesalahan dan kekurangan, sekian dari kami IT30, TERIMAKASIH :>
 
 ![github-small](https://github.com/PuroFuro/image_for_sisop/blob/main/fp/monitor.png)
