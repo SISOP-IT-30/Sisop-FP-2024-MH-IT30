@@ -19,11 +19,11 @@
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 1024
 #define SALT "duwae621h283"
-#define USERS_FILE "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/users.csv"
-#define CHANNELS_FILE "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/channels.csv"
-#define AUTH_FILE "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/auth.csv"
-#define CHAT_LOG_FILE "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/chat.csv"
-#define USERS_LOG_FILE "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/users.log"
+#define USERS_FILE "/home/purofuro/Fico/fpsisop/final/DiscorIT/users.csv"
+#define CHANNELS_FILE "/home/purofuro/Fico/fpsisop/final/DiscorIT/channels.csv"
+#define AUTH_FILE "/home/purofuro/Fico/fpsisop/final/DiscorIT/auth.csv"
+#define CHAT_LOG_FILE "/home/purofuro/Fico/fpsisop/final/DiscorIT/chat.csv"
+#define USERS_LOG_FILE "/home/purofuro/Fico/fpsisop/final/DiscorIT/users.log"
 
 int user_count = 0;
 int is_in_channel = 0;
@@ -41,7 +41,7 @@ client_info *clients[MAX_CLIENTS];
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Function prototypes
-void load_users();
+void remove_function(char *path);
 void *handle_client(void *arg);
 void register_user(int client_fd, char *username, char *password);
 void login(int client_fd, char *username, char *password);
@@ -74,6 +74,9 @@ void create_file(const char *path);
 int client_id(int client_fd, char *username);
 
 int main() {
+    mkdir("/home/purofuro/Fico/fpsisop/final/DiscorIT", 0777);
+    create_file(AUTH_FILE);
+
     int server_fd, client_socket, client_count = 0;
     struct sockaddr_in server_addr, client_addr;
     pthread_t tid;
@@ -102,7 +105,7 @@ int main() {
     while (1) {
         
         user_count = 0;
-        load_users();
+
         socklen_t client_len = sizeof(client_addr);
 
         // Accept connection
@@ -217,7 +220,15 @@ void *handle_client(void *arg) {
             } else {
                 send(client_socket, "Invalid command format. Usage: CREATE ROOM channel_name room_name\n", strlen("Invalid command format. Usage: CREATE ROOM channel_name room_name\n"), 0);
             }
-        } else if (strcmp(commands[0], "EDIT") == 0 && strcmp(commands[1], "ROOM") == 0) {
+        } 
+        else if(strcmp(commands[0], "EDIT") == 0 && strcmp(commands[1], "CHANNEL") == 0){
+            if(commands[2] != NULL && commands[3] != NULL){
+                edit_channel(client_socket, client->logged_in_user, commands[2], commands[3]);
+            } else {
+                send(client_socket, "Invalid command format. Usage: EDIT CHANNEL old_channel_name new_channel_name\n", strlen("Invalid command format. Usage: EDIT CHANNEL old_channel_name new_channel_name\n"), 0);
+            }
+        }
+        else if (strcmp(commands[0], "EDIT") == 0 && strcmp(commands[1], "ROOM") == 0) {
             if (commands[3] != NULL && commands[3] != NULL && commands[4] != NULL) {
                 edit_room(client_socket, client->logged_in_user, client->logged_in_channel, commands[2], commands[4]);
             } else {
@@ -233,6 +244,47 @@ void *handle_client(void *arg) {
         else if (strcmp(commands[0], "LIST") == 0 && strcmp(commands[1], "CHANNEL") == 0) {
             list_channels(client_socket, client->logged_in_user);
         } 
+        else if(strcmp(commands[0], "LIST") == 0 && strcmp(commands[1], "ROOM") == 0){
+            list_rooms(client_socket, client->logged_in_user, client->logged_in_channel);
+        }
+        else if (strcmp(commands[0], "EXIT") == 0) {
+            exit_discorit(client_socket, client->logged_in_user, client->logged_in_channel, client->logged_in_room);
+        } 
+        else if (strcmp(commands[0], "DELETE") == 0 && strcmp(commands[1], "CHANNEL") == 0) {
+            if (commands[2] != NULL) {
+                del_channel(client_socket, client->logged_in_user, commands[2]);
+            } else {
+                send(client_socket, "Invalid command format. Usage: DELETE CHANNEL channel_name\n", strlen("Invalid command format. Usage: DELETE CHANNEL channel_name\n"), 0);
+            }
+        } 
+        else if (strcmp(commands[0], "BAN") == 0) {
+            if (commands[1] != NULL) {
+                ban_user(client_socket, client->logged_in_user, client->logged_in_channel, commands[1]);
+            } else {
+                send(client_socket, "Invalid command format. Usage: BAN username\n", strlen("Invalid command format. Usage: BAN username\n"), 0);
+            }
+        } 
+        else if (strcmp(commands[0], "UNBAN") == 0) {
+            if (commands[1] != NULL) {
+                unban_user(client_socket, client->logged_in_user, client->logged_in_channel, commands[1]);
+            } else {
+                send(client_socket, "Invalid command format. Usage: UNBAN username\n", strlen("Invalid command format. Usage: UNBAN username\n"), 0);
+            }
+        } 
+        else if (strcmp(commands[0], "REMOVE") == 0) {
+            if (commands[1] != NULL) {
+                remove_user(client_socket, client->logged_in_user, client->logged_in_channel, commands[1]);
+            } else {
+                send(client_socket, "Invalid command format. Usage: REMOVE username\n", strlen("Invalid command format. Usage: REMOVE username\n"), 0);
+            }
+        } 
+        else if (strcmp(commands[0], "EDIT") == 0 && strcmp(commands[1], "PROFILE") == 0) {
+            if (commands[2] != NULL && strcmp(commands[3], "-p") == 0 && commands[4] != NULL) {
+                edit_profile(client_socket, client->logged_in_user, commands[2], commands[4]);
+            } else {
+                send(client_socket, "Invalid command format. Usage: EDIT PROFILE username -p new_password\n", strlen("Invalid command format. Usage: EDIT PROFILE username -p new_password\n"), 0);
+            }
+        }
         else if (strcmp(commands[0], "JOIN") == 0 && is_in_channel == 0) {
             if (commands[1] != NULL && channel_exists(commands[1])) {
                 char key[50];
@@ -533,16 +585,38 @@ void join_channel(int client_fd, char *username, char *channel_name, char *key) 
     pthread_mutex_unlock(&clients_mutex);
 
     // Append user to auth.csv
+
     char path[256];
-    sprintf(path, "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/%s/admin/auth.csv", clients[client_id(client_fd, username)]->logged_in_channel);
-    FILE *auth_file = fopen(path, "a");
-    if (!auth_file) {
+    sprintf(path, "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/admin/auth.csv", clients[client_id(client_fd, username)]->logged_in_channel);
+    FILE *auth_check = fopen(path, "r");
+    if (!auth_check) {
         perror("Failed to open AUTH_FILE");
         return;
     }
+    // Check if the user is already in the channel
+    bool alr_exists = false;
+    char line[256];
+    while (fgets(line, sizeof(line), auth_check)) {
+        char *token = strtok(line, ",");
+        char *name = strtok(NULL, ",");
+        if (name != NULL && strcmp(name, username) == 0) {
+            alr_exists = true;
+            break;
+        }
+    }
+
+    fclose(auth_check);
+    if(!alr_exists){
     
-    fprintf(auth_file, "%d,%s,user\n", client_id(client_fd, username), username);
-    fclose(auth_file);
+        FILE *auth_file = fopen(path, "a");
+        if (!auth_file) {
+            perror("Failed to open AUTH_FILE");
+            return;
+        }
+        
+        fprintf(auth_file, "%d,%s,user\n", client_id(client_fd, username), username);
+        fclose(auth_file);
+    }
 
     // Send confirmation message to client
     char message[BUFFER_SIZE];
@@ -620,7 +694,6 @@ void list_rooms(int client_fd, char *username, char *channel_name) {
 
     file = fopen(rooms_file, "r");
     if (!file) {
-        send(client_fd, "Belum ada room di channel ini\n", strlen("Belum ada room di channel ini\n"), 0);
         return;
     }
 
@@ -657,7 +730,7 @@ void join_room(int client_fd, char *username, char *room_name) {
     // Append user to auth.csv
     int room_exists = 0;
     char path[256];
-    sprintf(path, "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/%s/", clients[client_id(client_fd, username)]->logged_in_channel);
+    sprintf(path, "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/", clients[client_id(client_fd, username)]->logged_in_channel);
     DIR *d;
     struct dirent *dir;
     d = opendir(path);
@@ -686,7 +759,7 @@ void join_room(int client_fd, char *username, char *room_name) {
 void list_users(int client_fd, char *username) {
     // Construct the path to auth.csv based on the client's logged-in channel
     char users_file[256];
-    sprintf(users_file, "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/%s/admin/auth.csv", clients[client_id(client_fd, username)]->logged_in_channel);
+    sprintf(users_file, "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/admin/auth.csv", clients[client_id(client_fd, username)]->logged_in_channel);
 
     // Open the auth.csv file
     FILE *file = fopen(users_file, "r");
@@ -723,15 +796,14 @@ void list_users(int client_fd, char *username) {
 }
 
 void chat(int client_fd, char *username, char *channel_name, char *room_name, char *message) {
-    // Ensure the file path includes the channel name and room name
     char chat_file_path[256];
-    sprintf(chat_file_path, "DiscorIT/%s/%s/chat.csv", channel_name, room_name);
+    sprintf(chat_file_path, "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/%s/chat.csv", channel_name, room_name);
 
     // printf("Channel: %s, Room: %s\n", channel_name, room_name);
 
     // Create the directory if it does not exist
     char dir_path[256];
-    sprintf(dir_path, "DiscorIT/%s/%s", channel_name, room_name);
+    sprintf(dir_path, "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/%s/", channel_name, room_name);
     mkdir(dir_path, 0777);
 
     FILE *file = fopen(chat_file_path, "a+");
@@ -774,11 +846,10 @@ void chat(int client_fd, char *username, char *channel_name, char *room_name, ch
 
 void see_chat(int client_fd, char *username, char *channel_name, char *room_name) {
     char chat_file_path[256];
-    sprintf(chat_file_path, "DiscorIT/%s/%s/chat.csv", channel_name, room_name);
+    sprintf(chat_file_path, "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/%s/chat.csv", channel_name, room_name);
 
     FILE *file = fopen(chat_file_path, "r");
     if (!file) {
-        send(client_fd, "No chat in this room yet\n", strlen("No chat in this room yet\n"), 0);
         return;
     }
 
@@ -807,12 +878,11 @@ void edit_chat(int client_fd, char *username, char *channel_name, char *room_nam
     pthread_mutex_unlock(&clients_mutex);
 
     if (!user_found) {
-        send(client_fd, "Anda tidak memiliki akses untuk mengedit chat di room ini\n", strlen("Anda tidak memiliki akses untuk mengedit chat di room ini\n"), 0);
         return;
     }
 
     char chat_file[256];
-    sprintf(chat_file, "%s_%s_chat.csv", channel_name, room_name);
+    sprintf(chat_file, "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/chat.csv", channel_name);
 
     FILE *file = fopen(chat_file, "r+");
     if (!file) {
@@ -825,7 +895,8 @@ void edit_chat(int client_fd, char *username, char *channel_name, char *room_nam
     bool message_found = false;
     while (fgets(line, sizeof(line), file)) {
         int id;
-        sscanf(line, "[%*[^]]][%d]", &id);
+        char *token = strtok(line, " ");
+        sscanf(token, "[%*[^]]][%d]", &id);
         if (id == message_id) {
             char timestamp[80];
             sscanf(line, "[%[^]]][%*d]", timestamp);
@@ -863,12 +934,11 @@ void del_chat(int client_fd, char *username, char *channel_name, char *room_name
     pthread_mutex_unlock(&clients_mutex);
 
     if (!user_found) {
-        send(client_fd, "Anda tidak memiliki akses untuk menghapus chat di room ini\n", strlen("Anda tidak memiliki akses untuk menghapus chat di room ini\n"), 0);
         return;
     }
 
     char chat_file[256];
-    sprintf(chat_file, "%s_%s_chat.csv", channel_name, room_name);
+    sprintf(chat_file, "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/%s/chat.csv", channel_name, room_name);
 
     // Open the chat file for reading and writing
     FILE *file = fopen(chat_file, "r+");
@@ -989,7 +1059,7 @@ void create_channel(int client_fd, char *username, char *channel_name, char *key
     create_directory(admin_path);
 
     char auth_file[256];
-    sprintf(auth_file, "DiscorIT/%s/admin/auth.csv", channel_name);
+    sprintf(auth_file, "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/admin/auth.csv", channel_name);
     create_file(auth_file);
 
     // Add the user as an admin in the new channel's auth.csv
@@ -1073,11 +1143,6 @@ void edit_channel(int client_fd, char *username, char *old_channel_name, char *n
 
     pthread_mutex_unlock(&clients_mutex);
 
-    if (!is_admin_or_root) {
-        send(client_fd, "Hanya admin atau root yang dapat mengedit channel\n", strlen("Hanya admin atau root yang dapat mengedit channel\n"), 0);
-        return;
-    }
-
     char channels_file[256] = CHANNELS_FILE;
     create_directory("DiscorIT");
     FILE *file = fopen(channels_file, "r+");
@@ -1088,21 +1153,46 @@ void edit_channel(int client_fd, char *username, char *old_channel_name, char *n
 
     char line[256];
     bool channel_found = false;
-    long int pos = -1;
     while (fgets(line, sizeof(line), file)) {
-        char existing_channel[50];
-        sscanf(line, "%[^,],", existing_channel);
-        if (strcmp(existing_channel, old_channel_name) == 0) {
-            channel_found = true;
-            pos = ftell(file) - strlen(line); // Get position before current line
-            break;
+            char *token = strtok(line, ",");
+            char *channel_name = strtok(NULL, ",");
+            if (channel_name != NULL && strcmp(channel_name, old_channel_name) == 0) {
+                channel_found = true;
+                break;
         }
     }
 
     if (!channel_found) {
-        fclose(file);
         send(client_fd, "Channel tidak ditemukan\n", strlen("Channel tidak ditemukan\n"), 0);
         return;
+    }
+    DIR *d;
+    struct dirent *dir;
+    char path[256];
+    snprintf(path, sizeof(path), "/home/purofuro/Fico/fpsisop/final/DiscorIT/");
+    d = opendir(path);
+    if (d) {
+        while ((dir = readdir(d)) != NULL) {
+            if(strcmp(dir->d_name, old_channel_name) == 0) {
+                char new_channel_path[256];
+                char old_channel_path[256];
+
+                snprintf(old_channel_path, sizeof(old_channel_path), "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s", old_channel_name);
+                snprintf(new_channel_path, sizeof(new_channel_path), "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s", new_channel_name);
+                pid_t child_id;
+                int status;
+                child_id = fork();
+                if (child_id == 0) {
+                    char *argv[] = {"mv", old_channel_path, new_channel_path, NULL};
+                    execv("/bin/mv", argv);
+                }
+                else {
+                    while ((wait(&status)) > 0);
+                }
+                break;
+            }
+        }
+        closedir(d);
     }
 
     // Open a temporary file to copy all lines except the one to edit
@@ -1116,10 +1206,10 @@ void edit_channel(int client_fd, char *username, char *old_channel_name, char *n
     // Copy all lines except the one to edit
     rewind(file);
     while (fgets(line, sizeof(line), file)) {
-        char existing_channel[50];
-        sscanf(line, "%[^,],", existing_channel);
-        if (strcmp(existing_channel, old_channel_name) != 0) {
-            fprintf(temp_file, "%s", line);
+        char *token = strtok(line, ",");
+        char *channel_name = strtok(NULL, ",");
+        if (channel_name != NULL && strcmp(channel_name, old_channel_name) != 0) {
+            fprintf(temp_file, "%s", new_channel_name);
         }
     }
 
@@ -1139,7 +1229,7 @@ void edit_channel(int client_fd, char *username, char *old_channel_name, char *n
         return;
     }
 
-    fprintf(file, "%s,%s,%s\n", new_channel_name, username, "nokey");
+    fprintf(file, "%d,%s,%s\n", 1, new_channel_name, "nokey");
     fclose(file);
 
     // Log the edit in users.log
@@ -1158,6 +1248,8 @@ void edit_channel(int client_fd, char *username, char *old_channel_name, char *n
     fclose(log);
 
     send(client_fd, "Channel berhasil diubah\n", strlen("Channel berhasil diubah\n"), 0);
+    
+
 }
 
 void del_channel(int client_fd, char *username, char *channel_name) {
@@ -1172,13 +1264,51 @@ void del_channel(int client_fd, char *username, char *channel_name) {
     }
 
     if (current_client != NULL) {
+        // Check if the user is the owner or has permission to delete the channel
         if (strcmp(current_client->logged_in_channel, channel_name) == 0) {
+            
+            // Remove the channel
+            FILE *file = fopen(CHANNELS_FILE, "r");
+            FILE *temp = fopen("temp.csv", "w");
+            char line[256];
+
+            while (fgets(line, sizeof(line), file)) {
+                char *stored_channel = strtok(line, ",");
+                if (stored_channel && strcmp(stored_channel, channel_name) != 0) {
+                    fprintf(temp, "%s", line);
+                }
+            }
+
+            fclose(file);
+            fclose(temp);
+            remove(CHANNELS_FILE);
+            rename("temp.csv", CHANNELS_FILE);
+
+            // Notify and remove users in the channel
+            for (int i = 0; i < MAX_CLIENTS; ++i) {
+                if (clients[i] != NULL) {
+                    strcpy(clients[i]->logged_in_channel, "");
+                    strcpy(clients[i]->logged_in_room, "");
+                    send(clients[i]->socket, "The channel you were in has been deleted\n", strlen("The channel you were in has been deleted\n"), 0);
+                }
+            }
+
             printf("Channel %s deleted\n", channel_name);
+            send(client_fd, "Channel successfully deleted\n", strlen("Channel successfully deleted\n"), 0);
+
+            // Log the activity
+            log_activity(username, "DELETE CHANNEL", channel_name);
+            char channel_path[256] = "/home/purofuro/Fico/fpsisop/final/DiscorIT/";
+            strcat(channel_path, channel_name);
+            remove_function(channel_path);
+
         } else {
             printf("You are not authorized to delete this channel\n");
+            send(client_fd, "You are not authorized to delete this channel\n", strlen("You are not authorized to delete this channel\n"), 0);
         }
     } else {
         printf("User not found\n");
+        send(client_fd, "User not found\n", strlen("User not found\n"), 0);
     }
 
     pthread_mutex_unlock(&clients_mutex);
@@ -1223,7 +1353,6 @@ void create_room(int client_fd, char *username, char *channel_name, char *room_n
     }
     fclose(file);
 
-    // Create room directory and chat.csv file
     char room_path[256];
     sprintf(room_path, "DiscorIT/%s/%s", channel_name, room_name);
     create_directory(room_path);
@@ -1252,7 +1381,7 @@ void edit_room(int client_fd, char *username, char *channel_name, char *old_room
     struct dirent *dir;
     char path[256];
     int found = 0;
-    snprintf(path, sizeof(path), "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/%s/", channel_name);
+    snprintf(path, sizeof(path), "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/", channel_name);
     d = opendir(path);
     if (d) {
         while ((dir = readdir(d)) != NULL) {
@@ -1260,8 +1389,8 @@ void edit_room(int client_fd, char *username, char *channel_name, char *old_room
                 char new_room_path[256];
                 char old_room_path[256];
 
-                snprintf(new_room_path, sizeof(new_room_path), "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/%s/%s", channel_name, new_room_name);
-                snprintf(old_room_path, sizeof(old_room_path), "/home/bosmuda/Kuliah/Semester_2/SISOP/Praktikum/progres3/main/fp/DiscorIT/%s/%s", channel_name, old_room_name);
+                snprintf(new_room_path, sizeof(new_room_path), "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/%s", channel_name, new_room_name);
+                snprintf(old_room_path, sizeof(old_room_path), "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/%s", channel_name, old_room_name);
                 pid_t child_id;
                 int status;
                 child_id = fork();
@@ -1301,14 +1430,35 @@ void del_room(int client_fd, char *username, char *channel_name, char *room_name
     }
 
     if (current_client != NULL) {
-        if (strcmp(current_client->logged_in_channel, channel_name) == 0 && strcmp(current_client->logged_in_room, room_name) == 0) {
-            printf("Room %s deleted from %s channel\n", room_name, channel_name);
+        if (strcmp(current_client->logged_in_channel, channel_name) == 0) {
+            
+            remove_function(room_name);
+            struct dirent *dir;
+            char path[256];
+            snprintf(path, sizeof(path), "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/", channel_name);
+            DIR *d = opendir(path);
+            if (d) {
+                while ((dir = readdir(d)) != NULL) {
+                    if(strcmp(dir->d_name, room_name) == 0) {
+                        char room_path[256];
+                        snprintf(room_path, sizeof(room_path), "/home/purofuro/Fico/fpsisop/final/DiscorIT/%s/%s", channel_name, room_name);
+                        remove_function(room_path);
+                        send(client_fd, "Room berhasil dihapus\n", strlen("Room berhasil dihapus\n"), 0);
+                        break;
+                    }
+                }
+                closedir(d);
+            }
+
         } else {
-            printf("You are not authorized to delete this room in this channel\n");
+            printf("Room %s not found in channel %s\n", room_name, channel_name);
+            send(client_fd, "Room not found\n", strlen("Room not found\n"), 0);
         }
+
     } else {
-        printf("User not found\n");
-    }
+            printf("You are not in the specified channel\n");
+            send(client_fd, "You are not in the specified channel\n", strlen("You are not in the specified channel\n"), 0);
+        }
 
     pthread_mutex_unlock(&clients_mutex);
 }
@@ -1445,31 +1595,44 @@ void exit_discorit(int client_fd, char *username, char *channel_name, char *room
 
     if (current_client != NULL) {
         if (strcmp(current_client->logged_in_channel, channel_name) == 0 && strcmp(current_client->logged_in_room, room_name) == 0) {
-            printf("User %s exited from channel %s and room %s\n", username, channel_name, room_name);
+            
+            strcpy(current_client->logged_in_channel, "");
+            strcpy(current_client->logged_in_room, "");
+            
+            // Log the activity
+
+            // Send a message to the client
+
+            // Close the client's socket
+            close(current_client->socket);
+
+            // Remove the client from the clients array
+            for (int i = 0; i < MAX_CLIENTS; ++i) {
+                if (clients[i] == current_client) {
+                    free(clients[i]);
+                    clients[i] = NULL;
+                    break;
+                }
+            }
         } else {
-            printf("You are not in the specified channel and room\n");
         }
     } else {
-        printf("User not found\n");
+        send(client_fd, "User not found\n", strlen("User not found\n"), 0);
     }
 
     pthread_mutex_unlock(&clients_mutex);
 }
 
-void load_users(){
-    FILE *file = fopen(USERS_FILE, "r");
-    if (!file) {
-        perror("Failed to open AUTH_FILE");
-        return;
-    }
+void remove_function(char* path) {
 
-    char line[256];
-    while (fgets(line, sizeof(line), file)) {
-        int id = atoi(strtok(line, ","));
-        char *username = strtok(line, ",");
-        char *password = strtok(NULL, ",");
-        char *role = strtok(NULL, ",");
-        user_count++;
+    pid_t child_id;
+    int status;
+    child_id = fork();
+    if (child_id == 0) {
+        char *argv[] = {"remove", "-r", "-f", path,  NULL};
+        execv("/bin/rm", argv);
     }
-    fclose(file);
+    else {
+        while ((wait(&status)) > 0);
+    }
 }
